@@ -214,8 +214,9 @@ app.command("/game-tag", async ({ command, ack, say }) => {
 
 // Score points whenever a message is sent in any channel
 // This is a simple scoring system where each player gets 1 point for not being the target and -5 points for being the target
-app.event("message.channels", async ({ event }) => {
+app.event("message", async ({ event }) => {
     const messageEvent = event as unknown as MessageEvent;
+    if (messageEvent.channel_type !== "channel") return; // Only process messages in public channels
     if (messageEvent.subtype) return; // Only process regular messages, not subtypes
     if (game) for (const player of game.players) {
         game.scores.set(player, Math.max((game.scores.get(player) || 0) + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0));
