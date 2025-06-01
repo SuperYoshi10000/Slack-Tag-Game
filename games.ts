@@ -29,7 +29,7 @@ class TagGame {
     host: string | null = null;
     active: boolean = false;
     channel?: string;
-    target: string | null = null;
+    target: string;
     lastActionTimestamp: number = Date.now(); // Initialize with the current timestamp
 
     constructor(channel?: string) {
@@ -240,7 +240,7 @@ app.action("start_game_action", async ({ body, ack, client }) => {
         return;
     }
     TagGame.load();
-    game?.start(userId);
+    game.start(userId);
     showHomeView(userId, client);
 });
 
