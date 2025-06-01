@@ -434,3 +434,13 @@ app.action("tag_another_player", async ({ body, ack, respond }) => {
     game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
     game.save();
 });
+
+setInterval(() => {
+    console.log("Saving game state...");
+    if (game && game.active) {
+        game.save();
+    } else {
+        console.log("No active game to save.");
+    }
+    console.log(game);
+}, 10000);
