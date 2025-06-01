@@ -44,12 +44,14 @@ class TagGame {
         this.active = true;
         this.target = startingPlayer; // The starting player is the initial target
         this.lastActionTimestamp = Date.now();
+        this.save();
     }
     join(player: string) {
         this.players.add(player);
         if (!this.scores.has(player)) {
             this.scores.set(player, 0);
         }
+        this.save();
     }
     leave(player: string) {
         if (this.target === player) {
@@ -66,9 +68,9 @@ class TagGame {
     }
     stop() {
         this.players.clear();
-        this.scores.clear();
         this.host = null;
         this.active = false;
+        this.save()
     }
     save() {
         const gameData = {
@@ -172,7 +174,6 @@ app.command("/tag-game", async ({ command, ack, say }) => {
             }
             game.stop();
             await say("The game has been stopped.");
-            game.save();
             break;
         default:
             const tagTarget = command.text.trim().replace(/^<@|[|>].*$/g, ""); // Remove <@ and |NAME> to get the user ID
@@ -276,7 +277,6 @@ app.action("stop_game_action", async ({ body, ack, client }) => {
     }
     game.stop();
     await sendMessage("The game has been stopped.", userId, client);
-    game.save();
     showHomeView(userId, client);
 });
 app.action("leave_game_action", async ({ body, ack, client }) => {
@@ -364,9 +364,10 @@ async function sendMessage(text: string, userId: string, client: WebClient) {
         console.error("No client provided for response.");
         return;
     }
-    await client.chat.postMessage({
+    await client.chat.postEphemeral({
         channel: userId,
-        text
+        text,
+        user: userId,
     });
 }
 
