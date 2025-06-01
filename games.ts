@@ -450,47 +450,5 @@ app.shortcut("tag_this_person", async ({ shortcut, ack, client, context }) => {
     await ack();
     const userId = shortcut.user.id;
     const tagTarget = shortcut.type === "message_action" && shortcut.message.user || null;
-
-    console.log(`Player "${userId}" is tagging "${tagTarget}"`);
-
-    if (!game) {
-        await sendMessage("No game is currently in progress. Please start a game first.", userId, client);
-        return;
-    }
-
-    // Handle game actions specific to the tag game
-    if (!tagTarget) {
-        await sendMessage("Please specify a player to tag.", userId, client);
-        return;
-    }
-    if (!game.players.has(userId)) {
-        await sendMessage("You are not a player in this game. Please join the game first.", userId, client);
-        return;
-    }
-    if (!(userId === game.target)) {
-        await sendMessage("You can only tag while you are it.", userId, client);
-        return;
-    }
-    if (!game.players.has(tagTarget)) {
-        await sendMessage("You can only tag players in the game.", userId, client);
-        return;
-    }
-    if (userId === tagTarget) {
-        await sendMessage("You cannot tag yourself.", userId, client);
-        return;
-    }
-    // Tag the target player
-    game.target = tagTarget;
-    let lastActionTimestamp = game.lastActionTimestamp;
-    let currentTime = Date.now();
-    let timeSinceLastAction = Math.floor((currentTime - lastActionTimestamp) / 5);
-    if (timeSinceLastAction < 5) { // 5 seconds cooldown
-        await sendMessage(`You must wait at least 5 seconds before tagging again. Time since last action: ${timeSinceLastAction} seconds.`, userId, client);
-        return;
-    }
-    game.lastActionTimestamp = currentTime; // Update the last action timestamp
-    game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
-    game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
-    game.save();
-    showHomeView(userId, client);
+    await tagAnotherPlayer(userId, tagTarget, client, sendMessage);
 });
