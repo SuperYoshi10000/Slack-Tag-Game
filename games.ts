@@ -38,6 +38,9 @@ class TagGame {
     start(startingPlayer: string) {
         this.host = startingPlayer;
         this.players.add(startingPlayer);
+        if (!this.scores.has(startingPlayer)) {
+            this.scores.set(startingPlayer, 0);
+        }
         this.active = true;
         this.target = startingPlayer; // The starting player is the initial target
         this.lastActionTimestamp = Date.now();
