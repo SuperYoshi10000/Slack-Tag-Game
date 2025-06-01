@@ -83,6 +83,7 @@ class TagGame {
         });
     }
     static load() {
+        game = new TagGame();
         // Load game data from a database or file
         if (fs.existsSync("gameData.json")) {
             fs.readFile("gameData.json", "utf8", (err, data) => {
@@ -92,7 +93,6 @@ class TagGame {
                 }
                 const gameData = JSON.parse(data);
                 // Restore game state
-                game = new TagGame();
                 game.players = new Set(gameData.players);
                 game.scores = new Map(gameData.scores);
                 game.target = gameData.target;
