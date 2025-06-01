@@ -40,6 +40,8 @@ class TagGame {
         this.host = startingPlayer;
         this.players.add(startingPlayer);
         this.active = true;
+        this.target = startingPlayer; // The starting player is the initial target
+        this.lastActionTimestamp = Date.now();
     }
     join(player: string) {
         this.players.add(player);
@@ -317,7 +319,7 @@ app.action("tag_another_player", async ({ body, ack, respond, client }) => {
         await respond("You are not a player in this game. Please join the game first.");
         return;
     }
-    if (!(userId === game.target) ) {
+    if (!(userId === game.target)) {
         await respond("You can only tag while you are it.");
         return;
     }
