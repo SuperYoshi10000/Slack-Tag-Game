@@ -1,5 +1,6 @@
-import { App, KnownEventFromType } from "@slack/bolt";
-import { MessageEvent, GenericMessageEvent, ActionsBlockElement, Block, KnownBlock } from "@slack/types";
+import { AllMiddlewareArgs, App, KnownEventFromType, SlackEventMiddlewareArgs, StringIndexed } from "@slack/bolt";
+import { WebClient } from "@slack/web-api";
+import { MessageEvent, GenericMessageEvent, ActionsBlockElement, Block, KnownBlock, AppHomeOpenedEvent } from "@slack/types";
 import "dotenv/config";
 import * as fs from "fs";
 import { writeFile } from "fs";
@@ -225,10 +226,136 @@ app.event("message", async ({ event }) => {
         game.scores.set(player, Math.max((game.scores.get(player) || 0) + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0));
     }
 });
-    
-app.event("app_home_opened", async ({ event, client }) => {
-    const userId = event.user;
 
+app.event("app_home_opened", ({ event, client }) => showHomeView(event.user, client));
+
+app.action("start_game_action", async ({ body, ack, respond, client, context }) => {
+    await ack();
+    const userId = body.user.id;
+    console.log(`Player "${userId}" is starting a game`);
+    // Start the game logic here
+    if (game?.active) {
+        await respond("A game is already in progress.");
+        return;
+    }
+    TagGame.load();
+    game?.start(userId);
+    showHomeView(userId, client);
+});
+
+app.action("join_game_action", async ({ body, ack, respond, client }) => {
+    await ack();
+    console.log(`Player "${body.user.id}" is joining the game`);
+    const userId = body.user.id;
+    if (!game) {
+        await respond("No game is currently in progress. Please start a game first.");
+        return;
+    }
+    if (!game.players.has(userId)) {
+        game.join(userId);
+    } else {
+        await respond("You are already in the game.");
+    }
+    showHomeView(userId, client);
+});
+app.action("stop_game_action", async ({ body, ack, respond, client }) => {
+    await ack();
+    const userId = body.user.id;
+    console.log(`Player "${userId}" is stopping the game`);
+    if (!game) {
+        await respond("No game is currently in progress.");
+        return;
+    }
+    if (userId !== game.host) {
+        await respond("Only the game host can stop the game.");
+        return;
+    }
+    game.stop();
+    await respond("The game has been stopped.");
+    game.save();
+    showHomeView(userId, client);
+});
+app.action("leave_game_action", async ({ body, ack, respond, client }) => {
+    await ack();
+    const userId = body.user.id;
+
+    console.log(`Player "${userId}" leaving the game`);
+    
+    if (!game) {
+        await respond("No game is currently in progress.");
+        return;
+    }
+    if (!game.players.has(userId)) {
+        await respond("You are not in the game.");
+        return;
+    }
+    if (!game.leave(userId)) {
+        await respond("Failed to leave the game. You might be the target.");
+        return;
+    }
+    await respond("You have left the game.");
+    showHomeView(userId, client);
+});
+app.action("tag_another_player", async ({ body, ack, respond, client }) => {
+    await ack();
+    const userId = body.user.id;
+    const tagTarget = body.type === "block_actions" && body.actions[0].type === "users_select" ? body.actions[0].selected_user : null;
+    
+    console.log(`Player "${userId}" is tagging "${tagTarget}"`);
+
+    if (!game) {
+        await respond("No game is currently in progress. Please start a game first.");
+        return;
+    }
+
+    // Handle game actions specific to the tag game
+    if (!tagTarget) {
+        await respond("Please specify a player to tag.");
+        return;
+    }
+    if (!game.players.has(userId)) {
+        await respond("You are not a player in this game. Please join the game first.");
+        return;
+    }
+    if (!(userId === game.target) ) {
+        await respond("You can only tag while you are it.");
+        return;
+    }
+    if (!game.players.has(tagTarget)) {
+        await respond("You can only tag players in the game.");
+        return;
+    }
+    if (userId === tagTarget) {
+        await respond("You cannot tag yourself.");
+        return;
+    }
+    // Tag the target player
+    game.target = tagTarget;
+    let lastActionTimestamp = game.lastActionTimestamp;
+    let currentTime = Date.now();
+    let timeSinceLastAction = Math.floor((currentTime - lastActionTimestamp) / 5);
+    if (timeSinceLastAction < 5) { // 5 seconds cooldown
+        await respond(`You must wait at least 5 seconds before tagging again. Time since last action: ${timeSinceLastAction} seconds.`);
+        return;
+    }
+    game.lastActionTimestamp = currentTime; // Update the last action timestamp
+    game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
+    game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
+    game.save();
+    showHomeView(userId, client);
+});
+
+setInterval(() => {
+    console.log("Saving game state...");
+    if (game && game.active) {
+        game.save();
+    } else {
+        console.log("No active game to save.");
+    }
+    console.log(game);
+}, 10000);
+
+async function showHomeView(userId: string, client: WebClient) {
     const elements = Array.from(game?.scores.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
         type: "rich_text_section" as const,
         elements: [{
@@ -298,21 +425,21 @@ app.event("app_home_opened", async ({ event, client }) => {
     }];
     if (game?.active && game.target === userId) {
         blocks.splice(1, 0, {
-			type: "section",
-			text: {
-				type: "mrkdwn",
-				text: "Tag another player"
-			},
-			accessory: {
-				type: "users_select",
-				placeholder: {
-					type: "plain_text",
-					text: "Select a user",
-					emoji: true
-				},
-				action_id: "tag_another_player",
-			}
-		});
+            type: "section",
+            text: {
+                type: "mrkdwn",
+                text: "Tag another player"
+            },
+            accessory: {
+                type: "users_select",
+                placeholder: {
+                    type: "plain_text",
+                    text: "Select a user",
+                    emoji: true
+                },
+                action_id: "tag_another_player",
+            }
+        });
     }
 
     client.views.publish({
@@ -322,125 +449,5 @@ app.event("app_home_opened", async ({ event, client }) => {
             blocks
         }
     });
-});
+};
 
-app.action("start_game_action", async ({ body, ack, respond, client, context }) => {
-    await ack();
-    const userId = body.user.id;
-    console.log(`Player "${userId}" is starting a game`);
-    // Start the game logic here
-    if (game?.active) {
-        await respond("A game is already in progress.");
-        return;
-    }
-    TagGame.load();
-    game?.start(userId);
-});
-
-app.action("join_game_action", async ({ body, ack, respond }) => {
-    await ack();
-    console.log(`Player "${body.user.id}" is joining the game`);
-    const userId = body.user.id;
-    if (!game) {
-        await respond("No game is currently in progress. Please start a game first.");
-        return;
-    }
-    if (!game.players.has(userId)) {
-        game.join(userId);
-    } else {
-        await respond("You are already in the game.");
-    }
-});
-app.action("stop_game_action", async ({ body, ack, respond }) => {
-    await ack();
-    const userId = body.user.id;
-    console.log(`Player "${userId}" is stopping the game`);
-    if (!game) {
-        await respond("No game is currently in progress.");
-        return;
-    }
-    if (userId !== game.host) {
-        await respond("Only the game host can stop the game.");
-        return;
-    }
-    game.stop();
-    await respond("The game has been stopped.");
-    game.save();
-});
-app.action("leave_game_action", async ({ body, ack, respond }) => {
-    await ack();
-    const userId = body.user.id;
-
-    console.log(`Player "${userId}" leaving the game`);
-    
-    if (!game) {
-        await respond("No game is currently in progress.");
-        return;
-    }
-    if (!game.players.has(userId)) {
-        await respond("You are not in the game.");
-        return;
-    }
-    if (!game.leave(userId)) {
-        await respond("Failed to leave the game. You might be the target.");
-        return;
-    }
-    await respond("You have left the game.");
-});
-app.action("tag_another_player", async ({ body, ack, respond }) => {
-    await ack();
-    const userId = body.user.id;
-    const tagTarget = body.type === "block_actions" && body.actions[0].type === "users_select" ? body.actions[0].selected_user : null;
-    
-    console.log(`Player "${userId}" is tagging "${tagTarget}"`);
-
-    if (!game) {
-        await respond("No game is currently in progress. Please start a game first.");
-        return;
-    }
-
-    // Handle game actions specific to the tag game
-    if (!tagTarget) {
-        await respond("Please specify a player to tag.");
-        return;
-    }
-    if (!game.players.has(userId)) {
-        await respond("You are not a player in this game. Please join the game first.");
-        return;
-    }
-    if (!(userId === game.target) ) {
-        await respond("You can only tag while you are it.");
-        return;
-    }
-    if (!game.players.has(tagTarget)) {
-        await respond("You can only tag players in the game.");
-        return;
-    }
-    if (userId === tagTarget) {
-        await respond("You cannot tag yourself.");
-        return;
-    }
-    // Tag the target player
-    game.target = tagTarget;
-    let lastActionTimestamp = game.lastActionTimestamp;
-    let currentTime = Date.now();
-    let timeSinceLastAction = Math.floor((currentTime - lastActionTimestamp) / 5);
-    if (timeSinceLastAction < 5) { // 5 seconds cooldown
-        await respond(`You must wait at least 5 seconds before tagging again. Time since last action: ${timeSinceLastAction} seconds.`);
-        return;
-    }
-    game.lastActionTimestamp = currentTime; // Update the last action timestamp
-    game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
-    game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
-    game.save();
-});
-
-setInterval(() => {
-    console.log("Saving game state...");
-    if (game && game.active) {
-        game.save();
-    } else {
-        console.log("No active game to save.");
-    }
-    console.log(game);
-}, 10000);
