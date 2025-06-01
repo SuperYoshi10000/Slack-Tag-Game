@@ -157,7 +157,7 @@ app.command("/tag-game", async ({ command, ack, say }) => {
                 return;
             }
             if (!game.leave(userId)) {
-                await say("Failed to leave the game because you are it.");
+                await say("You cannot leave the game because you are it.");
                 return;
             }
             await say("You have left the game.");
@@ -294,7 +294,7 @@ app.action("leave_game_action", async ({ body, ack, client }) => {
         return;
     }
     if (!game.leave(userId)) {
-        await sendMessage("Failed to leave the game because you are it.", userId, client);
+        await sendMessage("You cannot leave the game because you are it.", userId, client);
         return;
     }
     await sendMessage("You have left the game.", userId, client);
