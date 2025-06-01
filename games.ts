@@ -9,6 +9,7 @@ const SCORE_NON_TARGET = 1; // Points for not being the target
 const SCORE_TARGET = -5; // Points for being the target
 const TIME_MULTIPLIER_TAGGED = -0.1; // Multiplier for time-based scoring
 const TIME_MULTIPLIER_TAGGER = 0.1; // Multiplier for time-based scoring in general
+const AUTOSAVE_INTERVAL = 30000; // Autosave interval in milliseconds
 
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
@@ -341,14 +342,10 @@ app.shortcut("tag_this_person", async ({ shortcut, ack, client, context }) => {
 });
 
 setInterval(() => {
-    console.log("Saving game state...");
     if (game && game.active) {
         game.save();
-    } else {
-        console.log("No active game to save.");
     }
-    console.log(game);
-}, 30000);
+}, AUTOSAVE_INTERVAL);
 
 async function sendMessage(text: string, userId: string, client: WebClient, permanent = false) {
     if (permanent) await client.chat.postMessage({
