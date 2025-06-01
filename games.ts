@@ -108,6 +108,7 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
 
     switch (action) {
         case "start":
+            console.log(`Player "${userId}" is starting a game`);
             if (game?.active) {
                 await say("A game is already in progress.");
                 return;
@@ -127,6 +128,7 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
             }
             break;
         case "join":
+            console.log(`Player "${userId}" is joining the game`);
             if (!game) {
                 await say("No game is currently in progress. Please start a game first.");
                 return;
@@ -138,6 +140,7 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
             }
             break;
         case "leave":
+            console.log(`Player "${userId}" is leaving the game`);
             if (!game) {
                 await say("No game is currently in progress.");
                 return;
@@ -153,6 +156,7 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
             await say("You have left the game.");
             break;
         case "stop":
+            console.log(`Player "${userId}" is stopping the game`);
             if (!game) {
                 await say("No game is currently in progress.");
                 return;
@@ -167,6 +171,8 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
             break;
         default:
             const tagTarget = command.text.trim().replace(/^<@|[|>].*$/g, ""); // Remove <@ and |NAME> to get the user ID
+
+            console.log(`Player "${userId}" is tagging "${tagTarget}"`);
             if (!game) {
                 await say("No game is currently in progress. Please start a game first.");
                 return;
@@ -320,23 +326,25 @@ app.event("app_home_opened", async ({ event, client }) => {
 
 app.action("start_game_action", async ({ body, ack, respond, client, context }) => {
     await ack();
+    const userId = body.user.id;
+    console.log(`Player "${userId}" is starting a game`);
     // Start the game logic here
     if (game?.active) {
         await respond("A game is already in progress.");
         return;
     }
-    const userId = body.user.id;
     TagGame.load();
     game?.start(userId);
 });
 
 app.action("join_game_action", async ({ body, ack, respond }) => {
     await ack();
+    console.log(`Player "${body.user.id}" is joining the game`);
+    const userId = body.user.id;
     if (!game) {
         await respond("No game is currently in progress. Please start a game first.");
         return;
     }
-    const userId = body.user.id;
     if (!game.players.has(userId)) {
         game.join(userId);
     } else {
@@ -345,11 +353,12 @@ app.action("join_game_action", async ({ body, ack, respond }) => {
 });
 app.action("stop_game_action", async ({ body, ack, respond }) => {
     await ack();
+    const userId = body.user.id;
+    console.log(`Player "${userId}" is stopping the game`);
     if (!game) {
         await respond("No game is currently in progress.");
         return;
     }
-    const userId = body.user.id;
     if (userId !== game.host) {
         await respond("Only the game host can stop the game.");
         return;
@@ -361,6 +370,8 @@ app.action("stop_game_action", async ({ body, ack, respond }) => {
 app.action("leave_game_action", async ({ body, ack, respond }) => {
     await ack();
     const userId = body.user.id;
+
+    console.log(`Player "${userId}" leaving the game`);
     
     if (!game) {
         await respond("No game is currently in progress.");
@@ -380,6 +391,9 @@ app.action("tag_another_player", async ({ body, ack, respond }) => {
     await ack();
     const userId = body.user.id;
     const tagTarget = body.type === "block_actions" && body.actions[0].type === "users_select" ? body.actions[0].selected_user : null;
+    
+    console.log(`Player "${userId}" is tagging "${tagTarget}"`);
+
     if (!game) {
         await respond("No game is currently in progress. Please start a game first.");
         return;
