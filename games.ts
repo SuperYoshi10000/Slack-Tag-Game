@@ -1,5 +1,5 @@
 import { App, KnownEventFromType } from "@slack/bolt";
-import { MessageEvent, GenericMessageEvent } from "@slack/types";
+import { MessageEvent, GenericMessageEvent, ActionsBlockElement } from "@slack/types";
 import "dotenv/config";
 
 const SCORE_NON_TARGET = 1; // Points for not being the target
@@ -82,6 +82,8 @@ class TagGame implements Game {
         this.target = null;
     }
 }
+
+
 
 app.command("/playgame", async ({ command, ack, say, client }) => {
     let action = command.text.split(" ")[0].trim().toLowerCase();
@@ -223,3 +225,80 @@ app.event("message", async ({ event }) => {
     }
 });
     
+app.event("app_home_opened", async ({ event, say, client }) => {
+    const userId = event.user;
+
+    const elements = Array.from(game?.scores.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
+        type: "rich_text_section" as const,
+        elements: [{
+            type: "user" as const,
+            user_id: player
+        }, {
+            type: "text" as const,
+            text: " - "
+        }, {
+            type: "text" as const,
+            text: score.toString(),
+            style: { bold: true }
+        }]
+    }));
+
+    const buttonText = game?.active ? "Join Game" : "Start Game";
+    const buttonValue = game?.active ? "join_game" : "start_game";
+    const buttonAction = game?.active ? "join_game_action" : "start_game_action";
+
+    const buttons: ActionsBlockElement[] = [{
+        type: "button",
+        text: {
+            type: "plain_text",
+            text: buttonText,
+            emoji: true,
+        },
+        value: buttonValue,
+        action_id: buttonAction,
+        style: "primary",
+    }];
+    if (game?.active && game.host === userId) {
+        buttons.push({
+            type: "button",
+            text: {
+                type: "plain_text",
+                text: "Stop Game",
+                emoji: true
+            },
+            value: "stop_game",
+            action_id: "stop_game_action",
+            style: "danger"
+        });
+    }
+
+    client.views.publish({
+        user_id: userId,
+        view: {
+            type: "home",
+            blocks: [{
+                type: "actions",
+                elements: buttons
+            }, {
+                type: "divider"
+            }, {
+                type: "header",
+                text: {
+                    type: "plain_text",
+                    text: "Leaderboard",
+                    emoji: true
+                }
+            }, {
+                type: "rich_text",
+                elements: [{
+                    type: "rich_text_list",
+                    style: "ordered",
+                    indent: 0,
+                    border: 0,
+                    elements
+                }]
+            }]
+        }
+    });
+});
+
