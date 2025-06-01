@@ -353,7 +353,7 @@ setInterval(() => {
         console.log("No active game to save.");
     }
     console.log(game);
-}, 10000);
+}, 30000);
 
 async function showHomeView(userId: string, client: WebClient) {
     const elements = Array.from(game?.scores.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
