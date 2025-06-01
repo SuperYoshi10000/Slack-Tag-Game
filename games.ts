@@ -4,6 +4,7 @@ import { MessageEvent, ActionsBlockElement, KnownBlock } from "@slack/types";
 import "dotenv/config";
 import * as fs from "fs";
 
+
 const SCORE_NON_TARGET = 1; // Points for not being the target
 const SCORE_TARGET = -5; // Points for being the target
 const TIME_MULTIPLIER_TAGGED = -0.1; // Multiplier for time-based scoring
@@ -21,6 +22,8 @@ const app = new App({
     await app.start(process.env.PORT || 3000);
     console.log("⚡️ Bolt app is running!");
 })();
+
+type SendMessageFunction = (text: string, userId: string, client: WebClient, permanent?: boolean) => Promise<void>;
 
 let game: TagGame;
 class TagGame {
@@ -132,33 +135,12 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
             await stopGame(userId, client, _say);
             break;
         case "invite":
-            // Invite logic (inline, as it's not used anywhere else)
-            console.log(`Player "${userId}" is inviting others to the game`);
-            client.chat.postEphemeral({
-                channel: command.channel_id,
-                user: userId,
-                blocks: [{
-                    type: "input",
-                    element: {
-                        type: "multi_users_select",
-                        placeholder: {
-                            type: "plain_text",
-                            text: "Select users",
-                            emoji: true
-                        },
-                        action_id: "invite_people_to_play",
-                    },
-                    label: {
-                        type: "plain_text",
-                        text: "Invite people to play",
-                        emoji: true
-                    }
-                }],
-            });
+            await openInviteMenu(userId, client, command);
             break;
         default:
             const tagTarget = command.text.trim().replace(/^<@|[|>].*$/g, "");
             await tagAnotherPlayer(userId, tagTarget, client, _say);
+            break;
     }
 
 
@@ -176,6 +158,31 @@ app.event("message", async ({ event }) => {
 });
 
 app.event("app_home_opened", ({ event, client }) => showHomeView(event.user, client));
+
+async function openInviteMenu(userId: string, client: WebClient, command) {
+    console.log(`Player "${userId}" is inviting others to the game`);
+    await client.chat.postEphemeral({
+        channel: command.channel_id,
+        user: userId,
+        blocks: [{
+            type: "input",
+            element: {
+                type: "multi_users_select",
+                placeholder: {
+                    type: "plain_text",
+                    text: "Select users",
+                    emoji: true
+                },
+                action_id: "invite_people_to_play",
+            },
+            label: {
+                type: "plain_text",
+                text: "Invite people to play",
+                emoji: true
+            }
+        }],
+    });
+}
 
 // Helper functions for each action
 
@@ -286,9 +293,6 @@ async function invitePeopleToPlay(userId: string, selectedUsers: string[], clien
     }
 }
 
-// Alias for backward compatibility with the rest of the code
-type SendMessageFunction = (text: string, userId: string, client: WebClient, permanent?: boolean) => Promise<void>;
-
 // Slack action handlers
 
 app.action("start_game_action", async ({ body, ack, client }) => {
@@ -327,6 +331,13 @@ app.action("invite_people_to_play", async ({ body, ack, client }) => {
     const userId = body.user.id;
     const selectedUsers = body.type === "block_actions" && body.actions[0].type === "multi_users_select" ? body.actions[0].selected_users : [];
     await invitePeopleToPlay(userId, selectedUsers, client, sendMessage);
+});
+
+app.shortcut("tag_this_person", async ({ shortcut, ack, client, context }) => {
+    await ack();
+    const userId = shortcut.user.id;
+    const tagTarget = shortcut.type === "message_action" && shortcut.message.user || null;
+    await tagAnotherPlayer(userId, tagTarget, client, sendMessage);
 });
 
 setInterval(() => {
@@ -445,10 +456,3 @@ async function showHomeView(userId: string, client: WebClient) {
         }
     });
 };
-
-app.shortcut("tag_this_person", async ({ shortcut, ack, client, context }) => {
-    await ack();
-    const userId = shortcut.user.id;
-    const tagTarget = shortcut.type === "message_action" && shortcut.message.user || null;
-    await tagAnotherPlayer(userId, tagTarget, client, sendMessage);
-});
