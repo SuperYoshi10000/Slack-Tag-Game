@@ -10,6 +10,7 @@ const SCORE_TARGET = -5; // Points for being the target
 const TIME_MULTIPLIER_TAGGED = -0.1; // Multiplier for time-based scoring
 const TIME_MULTIPLIER_TAGGER = 0.1; // Multiplier for time-based scoring in general
 const AUTOSAVE_INTERVAL = 30000; // Autosave interval in milliseconds
+const SCORE_INTERVAL = 60000; // Score update interval in milliseconds
 
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
@@ -195,7 +196,7 @@ async function startGame(userId: string, client: WebClient, reply: SendMessageFu
     }
     TagGame.load();
     game.start(userId);
-    showHomeView(userId, client);
+    await showHomeView(userId, client);
 }
 
 async function joinGame(userId: string, client: WebClient, reply: SendMessageFunction) {
@@ -209,7 +210,7 @@ async function joinGame(userId: string, client: WebClient, reply: SendMessageFun
     } else {
         await reply("You are already in the game.", userId, client);
     }
-    showHomeView(userId, client);
+    await showHomeView(userId, client);
 }
 
 async function stopGame(userId: string, client: WebClient, reply: SendMessageFunction) {
@@ -223,8 +224,8 @@ async function stopGame(userId: string, client: WebClient, reply: SendMessageFun
         return;
     }
     game.stop();
+    await showHomeView(userId, client);
     await reply("The game has been stopped.", userId, client);
-    showHomeView(userId, client);
 }
 
 async function leaveGame(userId: string, client: WebClient, reply: SendMessageFunction) {
@@ -241,8 +242,8 @@ async function leaveGame(userId: string, client: WebClient, reply: SendMessageFu
         await reply("You cannot leave the game because you are it.", userId, client);
         return;
     }
+    await showHomeView(userId, client);
     await reply("You have left the game.", userId, client);
-    showHomeView(userId, client);
 }
 
 async function tagAnotherPlayer(userId: string, tagTarget: string | null, client: WebClient, reply: SendMessageFunction) {
@@ -284,14 +285,15 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
     game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
     game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
     game.save();
-    showHomeView(userId, client);
+    await showHomeView(userId, client);
 }
 
 async function invitePeopleToPlay(userId: string, selectedUsers: string[], client: WebClient, reply: SendMessageFunction) {
     console.log(`Player "${userId}" is inviting ${selectedUsers.length} user(s) to play tag`);
     for (const invitedUser of selectedUsers) {
-        reply(`You have been invited to play tag by <@${userId}>!`, invitedUser, client);
+        reply(`You have been invited to play tag by <@${userId}>!`, invitedUser, client); // No await here, we want to send all invites in parallel
     }
+    await reply(`You have invited ${selectedUsers.length} user(s) to play tag.`, userId, client);
 }
 
 // Slack action handlers
@@ -346,6 +348,9 @@ setInterval(() => {
         game.save();
     }
 }, AUTOSAVE_INTERVAL);
+setInterval(() => {
+    givePoints();
+}, SCORE_INTERVAL);
 
 async function sendMessage(text: string, userId: string, client: WebClient, permanent = false) {
     if (permanent) await client.chat.postMessage({
@@ -445,7 +450,7 @@ async function showHomeView(userId: string, client: WebClient) {
         });
     }
 
-    client.views.publish({
+    await client.views.publish({
         user_id: userId,
         view: {
             type: "home",
@@ -453,3 +458,15 @@ async function showHomeView(userId: string, client: WebClient) {
         }
     });
 };
+
+function givePoints() {
+    if (!game || !game.active) return; // No active game
+    const currentTime = Date.now();
+    for (const player of game.players) {
+        const score = game.scores.get(player) || 0;
+        const newScore = Math.max(score + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0);
+        game.scores.set(player, newScore);
+    }
+    game.lastActionTimestamp = currentTime; // Update the last action timestamp
+    game.save();
+}
