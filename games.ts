@@ -392,18 +392,21 @@ app.view("invite_people_modal", async ({ ack, view, body, client }) => {
     }
 });
 
-app.action("invite_people_confirm", async ({ body, ack, client }) => {
+app.action("invite_people_confirm", async ({ body, ack, client, respond }) => {
     console.log(`Player "${body.user.id}" is inviting people to play`);
     await ack();
     const userId = body.user.id;
     const selectedUsers = body.type === "block_actions" && body.actions[0].type === "multi_users_select" ? body.actions[0].selected_users : [];
+    respond({ delete_original: true, }); // Delete the original message
     await invitePeopleToPlay(userId, selectedUsers, client, sendMessage);
 });
-app.action("cancel_invite_action", async ({ ack, body, client }) => {
+app.action("cancel_invite_action", async ({ ack, body, respond }) => {
     await ack();
     const userId = body.user.id;
-    // Close the invite modal (won't work as the message is not saved)
+    // Remove the invite menu
+    respond({ delete_original: true, });
 });
+
 
 app.shortcut("tag_this_person", async ({ shortcut, ack, client }) => {
     await ack();
