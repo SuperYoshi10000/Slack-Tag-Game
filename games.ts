@@ -148,7 +148,7 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
                                 text: "Invite People",
                                 emoji: true
                             },
-                            action_id: "invite_people_action",
+                            action_id: "invite_people_confirm",
                             style: "primary"
                         }, {
                             type: "button",
@@ -352,7 +352,7 @@ app.action("tag_another_player", async ({ body, ack, client }) => {
     await tagAnotherPlayer(userId, tagTarget, client, sendMessage);
 });
 
-app.action("invite_people_action", async ({ body, ack, client, action, payload }) => {
+app.action("invite_people_menu", async ({ body, ack, client, action, payload }) => {
     await ack();
     const triggerId = body.type === "block_actions" ? body.trigger_id : null;
     if (triggerId) {
@@ -392,12 +392,17 @@ app.view("invite_people_modal", async ({ ack, view, body, client }) => {
     }
 });
 
-app.action("invite_people_to_play", async ({ body, ack, client }) => {
+app.action("invite_people_confirm", async ({ body, ack, client }) => {
     console.log(`Player "${body.user.id}" is inviting people to play`);
     await ack();
     const userId = body.user.id;
     const selectedUsers = body.type === "block_actions" && body.actions[0].type === "multi_users_select" ? body.actions[0].selected_users : [];
     await invitePeopleToPlay(userId, selectedUsers, client, sendMessage);
+});
+app.action("cancel_invite_action", async ({ ack, body, client }) => {
+    await ack();
+    const userId = body.user.id;
+    // Close the invite modal (won't work as the message is not saved)
 });
 
 app.shortcut("tag_this_person", async ({ shortcut, ack, client }) => {
@@ -478,7 +483,7 @@ async function showHomeView(userId: string, client: WebClient) {
                 emoji: true
             },
             value: "invite_people",
-            action_id: "invite_people_action",
+            action_id: "invite_people_menu",
         });
     }
 
