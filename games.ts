@@ -291,10 +291,10 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
 
 async function invitePeopleToPlay(userId: string, selectedUsers: string[], client: WebClient, reply: SendMessageFunction) {
     console.log(`Player "${userId}" is inviting ${selectedUsers.length} user(s) to play tag`);
+    await reply(`You have invited ${selectedUsers.length} user(s) to play tag.`, userId, client);
     for (const invitedUser of selectedUsers) {
         reply(`You have been invited to play tag by <@${userId}>!`, invitedUser, client); // No await here, we want to send all invites in parallel
     }
-    await reply(`You have invited ${selectedUsers.length} user(s) to play tag.`, userId, client);
 }
 
 // Slack action handlers
