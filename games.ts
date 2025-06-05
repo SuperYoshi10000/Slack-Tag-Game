@@ -336,7 +336,7 @@ app.action("invite_people_to_play", async ({ body, ack, client }) => {
     await invitePeopleToPlay(userId, selectedUsers, client, sendMessage);
 });
 
-app.shortcut("tag_this_person", async ({ shortcut, ack, client, context }) => {
+app.shortcut("tag_this_person", async ({ shortcut, ack, client }) => {
     await ack();
     const userId = shortcut.user.id;
     const tagTarget = shortcut.type === "message_action" && shortcut.message.user || null;
@@ -466,6 +466,7 @@ function givePoints() {
         const score = game.scores.get(player) || 0;
         const newScore = Math.max(score + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0);
         game.scores.set(player, newScore);
+        console.log(`Player ${player} score updated: ${newScore}`);
     }
     game.lastActionTimestamp = currentTime; // Update the last action timestamp
     game.save();
