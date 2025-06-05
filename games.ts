@@ -166,8 +166,9 @@ app.event("message", async ({ event }) => {
 
 app.event("app_home_opened", ({ event, client }) => showHomeView(event.user, client));
 
-function getInviteMenuContent() {
+function getInviteMenuContent(): KnownBlock[] {
     return [{
+        block_id: "invite_people_to_play",
         type: "input",
         element: {
             type: "multi_users_select",
@@ -356,6 +357,16 @@ app.action("invite_people_action", async ({ body, ack, client, action, payload }
                 }
             }
         });
+    }
+});
+app.view("invite_people_modal", async ({ ack, view, body, client }) => {
+    await ack();
+    const userId = body.user.id;
+    const selectedUsers = view.state.values.invite_people_to_play.invite_people_to_play.selected_users || [];
+    if (selectedUsers.length > MAX_USER_INVITE_COUNT) {
+        await sendMessage(`You can only invite up to ${MAX_USER_INVITE_COUNT} users at a time.`, userId, client);
+    } else {
+        await invitePeopleToPlay(userId, selectedUsers, client, sendMessage);
     }
 });
 
