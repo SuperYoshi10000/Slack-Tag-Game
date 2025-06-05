@@ -139,7 +139,29 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
                 await client.chat.postEphemeral({
                     user: userId,
                     channel: command.channel_id,
-                    blocks: getInviteMenuContent()
+                    blocks: getInviteMenuContent().concat([{
+                        type: "actions",
+                        elements: [{
+                            type: "button",
+                            text: {
+                                type: "plain_text",
+                                text: "Invite People",
+                                emoji: true
+                            },
+                            action_id: "invite_people_action",
+                            style: "primary"
+                        }, {
+                            type: "button",
+                            text: {
+                                type: "plain_text",
+                                text: "Cancel",
+                                emoji: true
+                            },
+                            action_id: "cancel_invite_action",
+                            style: "danger"
+                        }]
+                    }]),
+                    text: "Invite people to play tag"
                 });
             } else if (selectedUsers.length > MAX_USER_INVITE_COUNT) await say(`You can only invite up to ${MAX_USER_INVITE_COUNT} users at a time.`);
             else await invitePeopleToPlay(userId, selectedUsers, client, say);
