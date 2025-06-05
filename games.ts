@@ -360,6 +360,7 @@ app.action("invite_people_action", async ({ body, ack, client, action, payload }
 });
 
 app.action("invite_people_to_play", async ({ body, ack, client }) => {
+    console.log(`Player "${body.user.id}" is inviting people to play`);
     await ack();
     const userId = body.user.id;
     const selectedUsers = body.type === "block_actions" && body.actions[0].type === "multi_users_select" ? body.actions[0].selected_users : [];
