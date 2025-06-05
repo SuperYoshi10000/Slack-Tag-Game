@@ -1,4 +1,4 @@
-import { App } from "@slack/bolt";
+import { App, BlockElementAction, ButtonClick, InteractiveAction, InteractiveButtonClick } from "@slack/bolt";
 import { WebClient } from "@slack/web-api";
 import { MessageEvent, ActionsBlockElement, KnownBlock } from "@slack/types";
 import "dotenv/config";
@@ -25,7 +25,7 @@ const app = new App({
     console.log("⚡️ Bolt app is running!");
 })();
 
-type SendMessageFunction = (text: string, userId: string, client: WebClient, permanent?: boolean) => Promise<void>;
+type SendMessageFunction = (text: string, userId: string, client: WebClient, permanent?: boolean) => Promise<unknown>;
 
 let game: TagGame;
 class TagGame {
@@ -113,35 +113,40 @@ class TagGame {
     }
 };
 
+const MAX_USER_INVITE_COUNT = 10;
 app.command("/tag-game", async ({ command, ack, say, client }) => {
     let action = command.text.split(" ")[0].trim().toLowerCase();
     await ack();
     const userId = command.user_id;
 
-    const _say = async (text: string, userId: string, client: WebClient): Promise<void> => {
-        await say(text);
-    };
-
     switch (command.text.split(" ")[0].trim().toLowerCase()) {
         case "start":
-            
-            await startGame(userId, client, _say);
+            await startGame(userId, client, say);
             break;
         case "join":
-            await joinGame(userId, client, _say);
+            await joinGame(userId, client, say);
             break;
         case "leave":
-            await leaveGame(userId, client, _say);
+            await leaveGame(userId, client, say);
             break;
         case "stop":
-            await stopGame(userId, client, _say);
+            await stopGame(userId, client, say);
             break;
         case "invite":
-            await openInviteMenu(userId, client, command);
+            let selectedUsers: string[] = command.text.split(" ").slice(1).map(user => user.replace(/^<@|[|>].*$/g, ""));
+            if (selectedUsers.length === 0) {
+                console.log(`Player "${userId}" is inviting others to the game`);
+                await client.chat.postEphemeral({
+                    user: userId,
+                    channel: command.channel_id,
+                    blocks: getInviteMenuContent()
+                });
+            } else if (selectedUsers.length > MAX_USER_INVITE_COUNT) await say(`You can only invite up to ${MAX_USER_INVITE_COUNT} users at a time.`);
+            else await invitePeopleToPlay(userId, selectedUsers, client, say);
             break;
         default:
             const tagTarget = command.text.trim().replace(/^<@|[|>].*$/g, "");
-            await tagAnotherPlayer(userId, tagTarget, client, _say);
+            await tagAnotherPlayer(userId, tagTarget, client, say);
             break;
     }
 
@@ -161,37 +166,24 @@ app.event("message", async ({ event }) => {
 
 app.event("app_home_opened", ({ event, client }) => showHomeView(event.user, client));
 
-async function openInviteMenu(userId: string, client: WebClient, command) {
-    console.log(`Player "${userId}" is inviting others to the game`);
-    await client.views.open({
-        trigger_id: command.trigger_id,
-        view: {
-            type: "modal",
-            callback_id: "invite_people_modal",
-            title: {
+function getInviteMenuContent() {
+    return [{
+        type: "input",
+        element: {
+            type: "multi_users_select",
+            placeholder: {
                 type: "plain_text",
-                text: "Invite people to play tag",
+                text: "Select users",
                 emoji: true
             },
-            blocks: [{
-                type: "input",
-                element: {
-                    type: "multi_users_select",
-                    placeholder: {
-                        type: "plain_text",
-                        text: "Select users",
-                        emoji: true
-                    },
-                    action_id: "invite_people_to_play",
-                },
-                label: {
-                    type: "plain_text",
-                    text: "Invite people to play",
-                    emoji: true
-                }
-            }]
+            action_id: "invite_people_to_play",
         },
-    });
+        label: {
+            type: "plain_text",
+            text: "Invite people to play",
+            emoji: true
+        }
+    }];
 }
 
 // Helper functions for each action
@@ -335,6 +327,26 @@ app.action("tag_another_player", async ({ body, ack, client }) => {
     const userId = body.user.id;
     const tagTarget = body.type === "block_actions" && body.actions[0].type === "users_select" ? body.actions[0].selected_user : null;
     await tagAnotherPlayer(userId, tagTarget, client, sendMessage);
+});
+
+app.action("invite_people_action", async ({ body, ack, client, action, payload }) => {
+    await ack();
+    const triggerId = body.type === "block_actions" ? body.trigger_id : null;
+    if (triggerId) {
+        await client.views.open({
+            trigger_id: triggerId,
+            view: {
+                type: "modal",
+                callback_id: "invite_people_modal",
+                title: {
+                    type: "plain_text",
+                    text: "Invite People",
+                    emoji: true
+                },
+                blocks: getInviteMenuContent()
+            }
+        });
+    }
 });
 
 app.action("invite_people_to_play", async ({ body, ack, client }) => {
