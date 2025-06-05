@@ -163,26 +163,34 @@ app.event("app_home_opened", ({ event, client }) => showHomeView(event.user, cli
 
 async function openInviteMenu(userId: string, client: WebClient, command) {
     console.log(`Player "${userId}" is inviting others to the game`);
-    await client.chat.postEphemeral({
-        channel: command.channel_id,
-        user: userId,
-        blocks: [{
-            type: "input",
-            element: {
-                type: "multi_users_select",
-                placeholder: {
-                    type: "plain_text",
-                    text: "Select users",
-                    emoji: true
-                },
-                action_id: "invite_people_to_play",
-            },
-            label: {
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            callback_id: "invite_people_modal",
+            title: {
                 type: "plain_text",
-                text: "Invite people to play",
+                text: "Invite people to play tag",
                 emoji: true
-            }
-        }],
+            },
+            blocks: [{
+                type: "input",
+                element: {
+                    type: "multi_users_select",
+                    placeholder: {
+                        type: "plain_text",
+                        text: "Select users",
+                        emoji: true
+                    },
+                    action_id: "invite_people_to_play",
+                },
+                label: {
+                    type: "plain_text",
+                    text: "Invite people to play",
+                    emoji: true
+                }
+            }]
+        },
     });
 }
 
@@ -406,6 +414,15 @@ async function showHomeView(userId: string, client: WebClient) {
             value: "stop_game",
             action_id: "stop_game_action",
             style: "danger"
+        }, {
+            type: "button",
+            text: {
+                type: "plain_text",
+                text: "Invite People",
+                emoji: true
+            },
+            value: "invite_people",
+            action_id: "invite_people_action",
         });
     }
 
