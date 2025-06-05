@@ -343,7 +343,17 @@ app.action("invite_people_action", async ({ body, ack, client, action, payload }
                     text: "Invite People",
                     emoji: true
                 },
-                blocks: getInviteMenuContent()
+                blocks: getInviteMenuContent(),
+                submit: {
+                    type: "plain_text",
+                    text: "Invite",
+                    emoji: true
+                },
+                close: {
+                    type: "plain_text",
+                    text: "Cancel",
+                    emoji: true
+                }
             }
         });
     }
