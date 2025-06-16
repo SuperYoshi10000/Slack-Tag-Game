@@ -13,7 +13,7 @@ const AUTOSAVE_INTERVAL = 30000; // Autosave interval in milliseconds
 const SCORE_INTERVAL = 60000; // Score update interval in milliseconds (unused)
 const ME = "U08HX6D4DMG"; // I can do stuff in the game without being the host
 const CHANNEL = "C08SV8LL95K";
-const TIMEOUT_DELAY = 60000; // End the game if there is no activity
+const TIMEOUT_DELAY = 300000; // End the game if there is no activity
 
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
@@ -508,6 +508,12 @@ async function showHomeView(userId: string, client: WebClient) {
     
 
     const blocks: KnownBlock[] = [{
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": isActive ? "You are playing right now" : isPlaying ? "You will play in the next game" : "You are not playing"
+        }
+    }, {
         type: "actions",
         elements: buttons
     }, {
@@ -558,7 +564,7 @@ async function showHomeView(userId: string, client: WebClient) {
 };
 
 setInterval(() => {
-    if (!game) return;
+    if (!game || Date.now() - game.lastActionTimestamp < TIMEOUT_DELAY) return;
     sendMessage("The game ended because there has been no activity recently", null, app.client, true)
     game.stop();
-}, TIMEOUT_DELAY);
+}, 60000);
