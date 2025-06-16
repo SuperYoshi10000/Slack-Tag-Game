@@ -558,6 +558,7 @@ async function showHomeView(userId: string, client: WebClient) {
 };
 
 setInterval(() => {
+    if (!game) return;
     sendMessage("The game ended because there has been no activity recently", null, app.client, true)
     game.stop();
 }, TIMEOUT_DELAY);
