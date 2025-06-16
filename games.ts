@@ -30,7 +30,8 @@ type SendMessageFunction = (text: string, userId: string, client: WebClient, per
 let game: TagGame;
 class TagGame {
     players: Set<string> = new Set();
-    scores: Map<string, number> = new Map();
+    in: Set<string> = new Set(); // Players who are currently in
+    out: string[] = []; // Players who are currently out
     host: string | null = null;
     active: boolean = false;
     channel?: string;
@@ -42,10 +43,6 @@ class TagGame {
     }
     start(startingPlayer: string) {
         this.host = startingPlayer;
-        this.players.add(startingPlayer);
-        if (!this.scores.has(startingPlayer)) {
-            this.scores.set(startingPlayer, 0);
-        }
         this.active = true;
         this.target = startingPlayer; // The starting player is the initial target
         this.lastActionTimestamp = Date.now();
@@ -53,9 +50,6 @@ class TagGame {
     }
     join(player: string) {
         this.players.add(player);
-        if (!this.scores.has(player)) {
-            this.scores.set(player, 0);
-        }
         this.save();
     }
     leave(player: string) {
@@ -75,7 +69,7 @@ class TagGame {
         this.players.clear();
         this.host = null;
         this.active = false;
-        this.save()
+        this.save();
     }
     save() {
         const gameData = {
@@ -166,13 +160,16 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
             } else if (selectedUsers.length > MAX_USER_INVITE_COUNT) await say(`You can only invite up to ${MAX_USER_INVITE_COUNT} users at a time.`);
             else await invitePeopleToPlay(userId, selectedUsers, client, say);
             break;
-        default:
-            const tagTarget = command.text.trim().replace(/^<@|[|>].*$/g, "");
-            await tagAnotherPlayer(userId, tagTarget, client, say);
-            break;
     }
 
 
+});
+
+app.command("/tag-tag", async ({ command, ack, say, client }) => {
+    ack();
+    const userId = command.user_id;
+    const tagTarget = command.text.trim().replace(/^<@|[|>].*$/g, "");
+    await tagAnotherPlayer(userId, tagTarget, client, say);
 });
 
 // Score points whenever a message is sent in any channel
@@ -287,7 +284,7 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
         await reply("You can only tag while you are it.", userId, client);
         return;
     }
-    if (!game.players.has(tagTarget)) {
+    if (!game.players.has(tagTarget) || !game.in.has(tagTarget)) {
         await reply("You can only tag players in the game.", userId, client);
         return;
     }
@@ -297,6 +294,8 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
     }
     // Tag the target player
     game.target = tagTarget;
+    game.out.push(tagTarget);
+    game.in.delete(tagTarget);
     let lastActionTimestamp = game.lastActionTimestamp;
     let currentTime = Date.now();
     let timeSinceLastAction = Math.floor((currentTime - lastActionTimestamp) / 5);
@@ -305,8 +304,8 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
         return;
     }
     game.lastActionTimestamp = currentTime; // Update the last action timestamp
-    game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
-    game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
+    //game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
+    //game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
     game.save();
     await showHomeView(userId, client);
 }
@@ -544,9 +543,9 @@ function givePoints() {
     if (!game || !game.active) return; // No active game
     const currentTime = Date.now();
     for (const player of game.players) {
-        const score = game.scores.get(player) || 0;
-        const newScore = Math.max(score + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0);
-        game.scores.set(player, newScore);
+        // const score = game.scores.get(player) || 0;
+        // const newScore = Math.max(score + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0);
+        // game.scores.set(player, newScore);
         console.log(`Player ${player} score updated: ${newScore}`);
     }
     game.lastActionTimestamp = currentTime; // Update the last action timestamp
