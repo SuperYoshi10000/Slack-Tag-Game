@@ -459,16 +459,16 @@ async function showHomeView(userId: string, client: WebClient) {
     const isActive = isPlaying && game?.active;
 
     const buttons: ActionsBlockElement[] = [];
-    if (!isActive) buttons.push({
+    if (!isActive && !isPlaying) buttons.push({
         type: "button",
         text: {
             type: "plain_text",
-            text: isPlaying ? "Leave Game" : "Join Game",
+            text: "Join Game",
             emoji: true,
         },
-        value: isPlaying ? "leave_game" : "join_game",
-        action_id: isPlaying ? "leave_game_action" : "join_game_action",
-        style: isPlaying ? undefined : "primary",
+        value: "join_game",
+        action_id: "join_game_action",
+        style: "primary",
     });
     if (isPlaying) buttons.push({
         type: "button",
@@ -480,6 +480,17 @@ async function showHomeView(userId: string, client: WebClient) {
         value: isActive ? "stop_game" : "start_game",
         action_id: isActive ? "stop_game_action" : "start_game_action",
         style: isActive ? "danger" : "primary"
+    });
+    if (!isActive && isPlaying) buttons.push({
+        type: "button",
+        text: {
+            type: "plain_text",
+            text: "Leave Game",
+            emoji: true,
+        },
+        value: "leave_game",
+        action_id: "leave_game_action",
+        style: "danger",
     });
     buttons.push({
         type: "button",
