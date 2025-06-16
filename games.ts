@@ -511,7 +511,7 @@ async function showHomeView(userId: string, client: WebClient) {
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": isActive ? "You are playing right now" : isPlaying ? "You will play in the next game" : "You are not playing"
+            "text": isActive ? (isPlaying ? "You are playing right now" : "You are not playing now but you can join the next game") : isPlaying ? "You will play in the next game" : "You are not playing"
         }
     }, {
         type: "actions",
