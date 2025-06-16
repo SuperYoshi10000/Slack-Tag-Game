@@ -30,8 +30,8 @@ type SendMessageFunction = (text: string, userId: string, client: WebClient, per
 let game: TagGame;
 class TagGame {
     players: Set<string> = new Set();
-    in: Set<string> = new Set(); // Players who are currently in
-    out: string[] = []; // Players who are currently out
+    in: Map<string, number> = new Map(); // Players who are currently in
+    out: Map<string, number> = new Map();; // Players who are currently out
     host: string | null = null;
     active: boolean = false;
     channel?: string;
@@ -72,9 +72,11 @@ class TagGame {
         this.save();
     }
     save() {
+        // Old code
+        /*
         const gameData = {
-            players: Array.from(this.players),
-            scores: Array.from(this.scores.entries()),
+            players: Array.from(this.players.entries()),
+            in: Array.from(this.in.entries()),
             target: this.target,
             lastActionTimestamp: this.lastActionTimestamp,
         };
@@ -85,10 +87,12 @@ class TagGame {
             } else {
                 console.log("Game data saved successfully.");
             }
-        });
+        });*/
     }
     static load() {
         game = new TagGame();
+        // Old code
+        /*
         // Load game data from a database or file
         if (fs.existsSync("gameData.json")) {
             fs.readFile("gameData.json", "utf8", (err, data) => {
@@ -103,7 +107,7 @@ class TagGame {
                 game.target = gameData.target;
                 game.lastActionTimestamp = gameData.lastActionTimestamp;
             });
-        }
+        }*/
     }
 };
 
@@ -292,10 +296,7 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
         await reply("You cannot tag yourself.", userId, client);
         return;
     }
-    // Tag the target player
-    game.target = tagTarget;
-    game.out.push(tagTarget);
-    game.in.delete(tagTarget);
+    
     let lastActionTimestamp = game.lastActionTimestamp;
     let currentTime = Date.now();
     let timeSinceLastAction = Math.floor((currentTime - lastActionTimestamp) / 5);
@@ -303,6 +304,13 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
         await reply(`You must wait at least 5 seconds before tagging again. Time since last action: ${timeSinceLastAction} seconds.`, userId, client);
         return;
     }
+
+    // Tag the target player
+    game.target = tagTarget;
+    game.out.push(tagTarget);
+    game.in.delete(tagTarget);
+    await reply(`<@${userId}> has tagged <@${tagTarget}>!`);
+    
     game.lastActionTimestamp = currentTime; // Update the last action timestamp
     //game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
     //game.scores.set(tagTarget, Math.max((game.scores.get(tagTarget) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGED), 0));
@@ -419,9 +427,6 @@ setInterval(() => {
         game.save();
     }
 }, AUTOSAVE_INTERVAL);
-setInterval(() => {
-    givePoints();
-}, SCORE_INTERVAL);
 
 async function sendMessage(text: string, userId: string, client: WebClient, permanent = false) {
     if (permanent) await client.chat.postMessage({
@@ -435,7 +440,7 @@ async function sendMessage(text: string, userId: string, client: WebClient, perm
 }
 
 async function showHomeView(userId: string, client: WebClient) {
-    const elements = Array.from(game?.scores.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
+    const elements = Array.from(game.players.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
         type: "rich_text_section" as const,
         elements: [{
             type: "user" as const,
@@ -451,43 +456,42 @@ async function showHomeView(userId: string, client: WebClient) {
     }));
 
     const isPlaying = game?.players.has(userId);
-    const buttonText = game?.active ? (isPlaying ? "Leave Game" : "Join Game") : "Start Game";
-    const buttonValue = game?.active ? (isPlaying ? "leave_game" : "join_game") : "start_game";
-    const buttonAction = game?.active ? (isPlaying ? "leave_game_action" : "join_game_action") : "start_game_action";
+    const isActive = isPlaying && game?.active;
 
-    const buttons: ActionsBlockElement[] = [{
+    const buttons: ActionsBlockElement[] = [];
+    if (!isActive) buttons.push({
         type: "button",
         text: {
             type: "plain_text",
-            text: buttonText,
+            text: isPlaying ? "Leave Game" : "Join Game",
             emoji: true,
         },
-        value: buttonValue,
-        action_id: buttonAction,
-        style: "primary",
-    }];
-    if (game?.active && game.host === userId) {
-        buttons.push({
-            type: "button",
-            text: {
-                type: "plain_text",
-                text: "Stop Game",
-                emoji: true
-            },
-            value: "stop_game",
-            action_id: "stop_game_action",
-            style: "danger"
-        }, {
-            type: "button",
-            text: {
-                type: "plain_text",
-                text: "Invite People",
-                emoji: true
-            },
-            value: "invite_people",
-            action_id: "invite_people_menu",
-        });
-    }
+        value: isPlaying ? "leave_game" : "join_game",
+        action_id: isPlaying ? "leave_game_action" : "join_game_action",
+        style: isPlaying ? undefined : "primary",
+    });
+    if (isPlaying) buttons.push({
+        type: "button",
+        text: {
+            type: "plain_text",
+            text: isActive ? "Stop Game" : "Start Game",
+            emoji: true
+        },
+        value: isActive ? "stop_game" : "start_game",
+        action_id: isActive ? "stop_game_action" : "start_game_action",
+        style: isActive ? "danger" : "primary"
+    });
+    buttons.push({
+        type: "button",
+        text: {
+            type: "plain_text",
+            text: "Invite People",
+            emoji: true
+        },
+        value: "invite_people",
+        action_id: "invite_people_menu",
+    });
+    
 
     const blocks: KnownBlock[] = [{
         type: "actions",
@@ -498,7 +502,7 @@ async function showHomeView(userId: string, client: WebClient) {
         type: "header",
         text: {
             type: "plain_text",
-            text: "Leaderboard",
+            text: "Players",
             emoji: true
         }
     }, {
@@ -538,16 +542,3 @@ async function showHomeView(userId: string, client: WebClient) {
         }
     });
 };
-
-function givePoints() {
-    if (!game || !game.active) return; // No active game
-    const currentTime = Date.now();
-    for (const player of game.players) {
-        // const score = game.scores.get(player) || 0;
-        // const newScore = Math.max(score + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0);
-        // game.scores.set(player, newScore);
-        console.log(`Player ${player} score updated: ${newScore}`);
-    }
-    game.lastActionTimestamp = currentTime; // Update the last action timestamp
-    game.save();
-}
