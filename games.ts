@@ -2,7 +2,7 @@ import { App, BlockElementAction, ButtonClick, InteractiveAction, InteractiveBut
 import { WebClient } from "@slack/web-api";
 import { MessageEvent, ActionsBlockElement, KnownBlock } from "@slack/types";
 import "dotenv/config";
-import * as fs from "fs";
+//import * as fs from "fs";
 
 
 const SCORE_NON_TARGET = 1; // Points for not being the target
@@ -10,7 +10,10 @@ const SCORE_TARGET = -5; // Points for being the target
 const TIME_MULTIPLIER_TAGGED = -0.1; // Multiplier for time-based scoring
 const TIME_MULTIPLIER_TAGGER = 0.1; // Multiplier for time-based scoring in general
 const AUTOSAVE_INTERVAL = 30000; // Autosave interval in milliseconds
-const SCORE_INTERVAL = 60000; // Score update interval in milliseconds
+const SCORE_INTERVAL = 60000; // Score update interval in milliseconds (unused)
+const ME = "U08HX6D4DMG"; // I can do stuff in the game without being the host
+const CHANNEL = "C08SV8LL95K";
+const TIMEOUT_DELAY = 60000; // End the game if there is no activity
 
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
@@ -30,7 +33,7 @@ type SendMessageFunction = (text: string, userId: string, client: WebClient, per
 let game: TagGame;
 class TagGame {
     players: Set<string> = new Set();
-    in: Map<string, number> = new Map(); // Players who are currently in
+    in: Set<string, number> = new Set(); // Players who are currently in
     out: Map<string, number> = new Map();; // Players who are currently out
     host: string | null = null;
     active: boolean = false;
@@ -90,7 +93,7 @@ class TagGame {
         });*/
     }
     static load() {
-        game = new TagGame();
+        if (!game) game = new TagGame();
         // Old code
         /*
         // Load game data from a database or file
@@ -176,17 +179,6 @@ app.command("/tag-tag", async ({ command, ack, say, client }) => {
     await tagAnotherPlayer(userId, tagTarget, client, say);
 });
 
-// Score points whenever a message is sent in any channel
-// This is a simple scoring system where each player gets 1 point for not being the target and -5 points for being the target
-app.event("message", async ({ event }) => {
-    const messageEvent = event as unknown as MessageEvent;
-    if (messageEvent.channel_type !== "channel") return; // Only process messages in public channels
-    if (messageEvent.subtype) return; // Only process regular messages, not subtypes
-    if (game) for (const player of game.players) {
-        game.scores.set(player, Math.max((game.scores.get(player) || 0) + (player === game.target ? SCORE_TARGET : SCORE_NON_TARGET), 0));
-    }
-});
-
 app.event("app_home_opened", ({ event, client }) => showHomeView(event.user, client));
 
 function getInviteMenuContent(): KnownBlock[] {
@@ -220,6 +212,7 @@ async function startGame(userId: string, client: WebClient, reply: SendMessageFu
     }
     TagGame.load();
     game.start(userId);
+    await reply(`<@${userId}> has started the game!`, userId, client, true);
     await showHomeView(userId, client);
 }
 
@@ -243,7 +236,7 @@ async function stopGame(userId: string, client: WebClient, reply: SendMessageFun
         await reply("No game is currently in progress.", userId, client);
         return;
     }
-    if (userId !== game.host) {
+    if (userId !== game.host && userId !== ME) {
         await reply("Only the game host can stop the game.", userId, client);
         return;
     }
@@ -307,9 +300,13 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
 
     // Tag the target player
     game.target = tagTarget;
-    game.out.push(tagTarget);
+    game.out.set(tagTarget, game.players.size - game.out.size);
     game.in.delete(tagTarget);
-    await reply(`<@${userId}> has tagged <@${tagTarget}>!`);
+    await reply(`<@${userId}> has tagged <@${tagTarget}>!`, userId, client, true);
+    if (game.in.size === 1) {
+        await reply(`<@${game.in.values().next().value}> wins!`);
+        game.stop();
+    }
     
     game.lastActionTimestamp = currentTime; // Update the last action timestamp
     //game.scores.set(userId, Math.max((game.scores.get(userId) || 0) + Math.floor(timeSinceLastAction * TIME_MULTIPLIER_TAGGER), 0));
@@ -422,15 +419,10 @@ app.shortcut("tag_this_person", async ({ shortcut, ack, client }) => {
     await tagAnotherPlayer(userId, tagTarget, client, sendMessage);
 });
 
-setInterval(() => {
-    if (game && game.active) {
-        game.save();
-    }
-}, AUTOSAVE_INTERVAL);
 
 async function sendMessage(text: string, userId: string, client: WebClient, permanent = false) {
     if (permanent) await client.chat.postMessage({
-        channel: userId,
+        channel: CHANNEL,
         text,
     }); else await client.chat.postEphemeral({
         channel: userId,
@@ -440,6 +432,7 @@ async function sendMessage(text: string, userId: string, client: WebClient, perm
 }
 
 async function showHomeView(userId: string, client: WebClient) {
+    const p = game.in.entries()
     const elements = Array.from(game.players.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
         type: "rich_text_section" as const,
         elements: [{
@@ -459,7 +452,7 @@ async function showHomeView(userId: string, client: WebClient) {
     const isActive = isPlaying && game?.active;
 
     const buttons: ActionsBlockElement[] = [];
-    if (!isActive && !isPlaying) buttons.push({
+    if ((!isPlaying && !isActive) || userId === ME) buttons.push({
         type: "button",
         text: {
             type: "plain_text",
@@ -470,18 +463,17 @@ async function showHomeView(userId: string, client: WebClient) {
         action_id: "join_game_action",
         style: "primary",
     });
-    if (isPlaying) buttons.push({
+    if ((isPlaying && !isActive) || userId === ME) buttons.push({
         type: "button",
         text: {
             type: "plain_text",
-            text: isActive ? "Stop Game" : "Start Game",
+            text: "Start Game",
             emoji: true
         },
-        value: isActive ? "stop_game" : "start_game",
-        action_id: isActive ? "stop_game_action" : "start_game_action",
-        style: isActive ? "danger" : "primary"
-    });
-    if (!isActive && isPlaying) buttons.push({
+        value: "start_game",
+        action_id: "start_game_action",
+        style: "primary"
+    }, {
         type: "button",
         text: {
             type: "plain_text",
@@ -491,6 +483,17 @@ async function showHomeView(userId: string, client: WebClient) {
         value: "leave_game",
         action_id: "leave_game_action",
         style: "danger",
+    });
+    if ((isPlaying && isActive && game?.host === userId) || userId === ME) buttons.push({
+        type: "button",
+        text: {
+            type: "plain_text",
+            text: "Stop Game",
+            emoji: true
+        },
+        value: "stop_game",
+        action_id: "stop_game_action",
+        style: "danger"
     });
     buttons.push({
         type: "button",
@@ -553,3 +556,8 @@ async function showHomeView(userId: string, client: WebClient) {
         }
     });
 };
+
+setInterval(() => {
+    sendMessage("The game ended because there has been no activity recently", null, app.client, true)
+    game.stop();
+}, TIMEOUT_DELAY);
