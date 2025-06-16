@@ -28,13 +28,13 @@ const app = new App({
     console.log("⚡️ Bolt app is running!");
 })();
 
-type SendMessageFunction = (text: string, userId: string, client: WebClient, permanent?: boolean) => Promise<unknown>;
+type SendMessageFunction = (text: string, userId: string | null, client: WebClient) => Promise<unknown>;
 
 let game: TagGame;
 class TagGame {
     players: Set<string> = new Set();
-    in: Set<string, number> = new Set(); // Players who are currently in
-    out: Map<string, number> = new Map();; // Players who are currently out
+    in: Set<string> = new Set(); // Players who are currently in
+    out: Map<string, number> = new Map(); // Players who are currently out
     host: string | null = null;
     active: boolean = false;
     channel?: string;
@@ -212,7 +212,7 @@ async function startGame(userId: string, client: WebClient, reply: SendMessageFu
     }
     TagGame.load();
     game.start(userId);
-    await reply(`<@${userId}> has started the game!`, userId, client, true);
+    await reply(`<@${userId}> has started the game!`, null, client);
     await showHomeView(userId, client);
 }
 
@@ -302,9 +302,9 @@ async function tagAnotherPlayer(userId: string, tagTarget: string | null, client
     game.target = tagTarget;
     game.out.set(tagTarget, game.players.size - game.out.size);
     game.in.delete(tagTarget);
-    await reply(`<@${userId}> has tagged <@${tagTarget}>!`, userId, client, true);
+    await reply(`<@${userId}> has tagged <@${tagTarget}>!`, null, client);
     if (game.in.size === 1) {
-        await reply(`<@${game.in.values().next().value}> wins!`);
+        await reply(`<@${game.in.values().next().value}> wins!`, null, client);
         game.stop();
     }
     
@@ -420,20 +420,37 @@ app.shortcut("tag_this_person", async ({ shortcut, ack, client }) => {
 });
 
 
-async function sendMessage(text: string, userId: string, client: WebClient, permanent = false) {
-    if (permanent) await client.chat.postMessage({
-        channel: CHANNEL,
-        text,
-    }); else await client.chat.postEphemeral({
+async function sendMessage(text: string, userId: string | null, client: WebClient) {
+    if (userId) await client.chat.postEphemeral({
         channel: userId,
         text,
         user: userId,
+    }); else await client.chat.postMessage({
+        channel: CHANNEL,
+        text,
     });
+    
 }
 
 async function showHomeView(userId: string, client: WebClient) {
-    const p = game.in.entries()
-    const elements = Array.from(game?.players.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
+    const inPlayers = Array.from(game.in);
+    const outPlayers = Array.from(game.out.keys());
+
+    const elements = Array.from(game?.players || []).sort((a, b) => {
+        if (a === b) return 0; // No need to sort if they are the same
+        // Order: in players, then target, then out players, then inactive
+        const aIsIn = inPlayers.includes(a);
+        const bIsIn = inPlayers.includes(b);
+        if (aIsIn && !bIsIn) return -1;
+        if (!aIsIn && bIsIn) return 1;
+        if (game.target === a) return -1;
+        if (game.target === b) return 1;
+        const aIsOut = outPlayers.includes(a);
+        const bIsOut = outPlayers.includes(b);
+        if (aIsOut && !bIsOut) return -1;
+        if (!aIsOut && bIsOut) return 1;
+        return 0;
+    }).map((player) => ({
         type: "rich_text_section" as const,
         elements: [{
             type: "user" as const,
@@ -564,7 +581,8 @@ async function showHomeView(userId: string, client: WebClient) {
 };
 
 setInterval(() => {
-    if (!game || Date.now() - game.lastActionTimestamp < TIMEOUT_DELAY) return;
-    sendMessage("The game ended because there has been no activity recently", null, app.client, true)
+    if (!game || !game.active || Date.now() - game.lastActionTimestamp < TIMEOUT_DELAY) return;
+    sendMessage("The game ended because there has been no activity recently", null, app.client);
+    console.log("Game ended due to inactivity");
     game.stop();
 }, 60000);
