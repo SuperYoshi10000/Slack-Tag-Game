@@ -170,7 +170,7 @@ app.command("/tag-game", async ({ command, ack, say, client }) => {
 });
 
 app.command("/tag-tag", async ({ command, ack, say, client }) => {
-    ack();
+    await ack();
     const userId = command.user_id;
     const tagTarget = command.text.trim().replace(/^<@|[|>].*$/g, "");
     await tagAnotherPlayer(userId, tagTarget, client, say);
