@@ -433,7 +433,7 @@ async function sendMessage(text: string, userId: string, client: WebClient, perm
 
 async function showHomeView(userId: string, client: WebClient) {
     const p = game.in.entries()
-    const elements = Array.from(game.players.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
+    const elements = Array.from(game?.players.entries() || []).sort((a, b) => b[1] - a[1]).map(([player, score]) => ({
         type: "rich_text_section" as const,
         elements: [{
             type: "user" as const,
@@ -443,7 +443,7 @@ async function showHomeView(userId: string, client: WebClient) {
             text: " - "
         }, {
             type: "text" as const,
-            text: score.toString(),
+            text: game.target === player ? "It!" : game.in.has(player) ? "In" : game.out.has(player) ? "Out" : "(Inactive)",
             style: { bold: true }
         }]
     }));
